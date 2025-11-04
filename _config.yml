@@ -101,4 +101,6 @@ theme: fluid
 # Deployment
 ## Docs: https://hexo.io/docs/one-command-deployment
 deploy:
-  type: ''
+  type: git
+  repo: https://github.com/little-creator/opennotes.git  # 你的仓库地址
+  branch: gh-pages  # GitHub Pages通常使用gh-pages分支
