@@ -22,10 +22,11 @@ jobs:
         with:
           node-version: '24.x' # **已更新为 24.x 版本**
 
-      - name: Install Hexo and dependencies # 安装 Hexo 及其他依赖
+      - name: Install Hexo and dependencies
         run: |
-          npm install -g hexo-cli # 全局安装 Hexo CLI
-          # npm install # 安装 package.json 中定义的依赖
+          npm install -g hexo-cli
+          npm install  # 安装 package.json 中的依赖
+          npm install hexo-deployer-git --save  # 新增这一行，安装部署插件
 
       - name: Install Hexo Fluid Theme # 安装 Fluid 主题
         run: npm install --save hexo-theme-fluid
