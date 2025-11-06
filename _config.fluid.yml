@@ -104,7 +104,7 @@ navbar:
 index:
   slogan:
     enable: true
-    text: 这是一条 Slogan
+    text: 欢迎来到我的世界~在这里你可以接触到我对计算机、心理学和生活的分享和感悟~
     api:
       enable: false
       url: "https://v1.hitokoto.cn/"
