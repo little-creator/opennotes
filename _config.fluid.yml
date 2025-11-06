@@ -1,0 +1,5 @@
+welcome:
+  enable: true
+  title: "欢迎来到我的笔记网站"
+  content: "感谢你的访问，希望这些内容对你有帮助！"
+  button: "开始浏览"
