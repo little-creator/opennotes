@@ -5,12 +5,43 @@
   
   <entry>
     <title>Hello World</title>
-    <link href="/opennotes/2025/11/08/hello-world/"/>
-    <url>/opennotes/2025/11/08/hello-world/</url>
+    <link href="/opennotes/2025/11/10/hello-world/"/>
+    <url>/opennotes/2025/11/10/hello-world/</url>
     
     <content type="html"><![CDATA[<p>Welcome to <a href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p><h2 id="Quick-Start"><a href="#Quick-Start" class="headerlink" title="Quick Start"></a>Quick Start</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs bash">$ hexo new <span class="hljs-string">&quot;My New Post&quot;</span><br></code></pre></td></tr></table></figure><p>More info: <a href="https://hexo.io/docs/writing.html">Writing</a></p><h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs bash">$ hexo server<br></code></pre></td></tr></table></figure><p>More info: <a href="https://hexo.io/docs/server.html">Server</a></p><h3 id="Generate-static-files"><a href="#Generate-static-files" class="headerlink" title="Generate static files"></a>Generate static files</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs bash">$ hexo generate<br></code></pre></td></tr></table></figure><p>More info: <a href="https://hexo.io/docs/generating.html">Generating</a></p><h3 id="Deploy-to-remote-sites"><a href="#Deploy-to-remote-sites" class="headerlink" title="Deploy to remote sites"></a>Deploy to remote sites</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs bash">$ hexo deploy<br></code></pre></td></tr></table></figure><p>More info: <a href="https://hexo.io/docs/one-command-deployment.html">Deployment</a></p>]]></content>
     
     
+    
+  </entry>
+  
+  
+  
+  <entry>
+    <title>compute_ptx_gpu</title>
+    <link href="/opennotes/2025/11/08/compute-ptx-gpu/"/>
+    <url>/opennotes/2025/11/08/compute-ptx-gpu/</url>
+    
+    <content type="html"><![CDATA[<h3 id="Tally：非侵入式的GPU资源隔离框架"><a href="#Tally：非侵入式的GPU资源隔离框架" class="headerlink" title="Tally：非侵入式的GPU资源隔离框架"></a>Tally：非侵入式的GPU资源隔离框架</h3><p>分享一篇最近的论文，我觉得其中最让我眼前一亮的是他的技术手段。文章的动机比较常见，是要解决GPU上运行多应用时，出现的相互干扰的问题。</p><p>围绕这类问题，最近几年出现了很多文章，主要场景有云环境中GPU服务多租户、智能驾驶领域提高GPU使用率等。当一个GPU上运行多个不同应用，可能会造成如下问题：</p><p>1，相互干扰导致应用尾延迟增大。</p><p>2，关键型应用无法立刻执行。</p><p>3，GPU资源利用率降低。</p><p>为了解决这些问题，常见的方案有切分和抢占两种措施。众所周知，GPU上的执行并不能用户精细操控。当kernel从cpu端发射到GPU端后，自动切分为block并且随机分配给SM执行。所以当一个kernel包含的block数量过多时，就会导致停留在GPU上等待调度队列的block数量过多，从而阻塞了新的kernel的发射和执行。因此，切分的方法就是将大的kernel切分成小kernel，将一次发射变为多次发射。从而可以在发射阶段来控制是否要继续执行。</p><p>抢占的实现有多种做法，本文是从代码级别实现的。由于nvidia GPU不开源，同时GPU本身不提供抢占原语，所以无法从硬件层面实现抢占的效果。本文从代码层面，将源代码转换为了持久化线程风格的代码，从而实现了手动抢占的实现。<br>持久化线程（PTB），指的是让kernel不再执行一次任务后就结束，而是可以不断地主动获取任务，从而实现代码层面控制block的执行进度。控制block的执行进度这一点使用一般的编程风格是做不到的，因此block在SM上的执行是无序随机的，不能确定哪个block先执行，哪个block后执行。<br>将原本kernel转换成持久化线程的方案也不难理解。首先是将原本的kernel作为最外层循环中执行的任务，之后添加一些控制变量，比如任务的ID，抢占信号等。</p><p>原本的kernel：</p><figure class="highlight verilog"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs verilog">__global__ <span class="hljs-keyword">void</span> kernel(float* <span class="hljs-keyword">input</span>, float* <span class="hljs-keyword">output</span>, <span class="hljs-keyword">int</span> total) &#123;<br>    <span class="hljs-keyword">int</span> idx = blockIdx<span class="hljs-variable">.x</span> * blockDim<span class="hljs-variable">.x</span> + threadIdx<span class="hljs-variable">.x</span>;<br>    <span class="hljs-keyword">if</span> (idx &gt;= total) <span class="hljs-keyword">return</span>;<br>    <span class="hljs-keyword">output</span>[idx] = <span class="hljs-keyword">input</span>[idx] / <span class="hljs-number">255</span><span class="hljs-variable">.0f</span>; <span class="hljs-comment">// 具体任务</span><br>    <span class="hljs-keyword">return</span>;<br>&#125;<br></code></pre></td></tr></table></figure><p>转换后的kernel：</p><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs cpp">__global__ <span class="hljs-type">int</span> global_idx;<br>__global__ <span class="hljs-type">bool</span> *preempt_flag;<br><span class="hljs-function">__global__ <span class="hljs-type">void</span> <span class="hljs-title">kernel</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">    <span class="hljs-type">float</span>* input, <span class="hljs-type">float</span>* output, <span class="hljs-type">int</span> total,</span></span><br><span class="hljs-params"><span class="hljs-function">    <span class="hljs-keyword">volatile</span> <span class="hljs-type">int</span>* global_idx, <span class="hljs-keyword">volatile</span> <span class="hljs-type">bool</span>* preempt_flag</span></span><br><span class="hljs-params"><span class="hljs-function">)</span> </span>&#123;<br>    <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) &#123;<br>        <span class="hljs-keyword">if</span> (*preempt_flag) <span class="hljs-keyword">return</span>;<br>        <span class="hljs-type">int</span> idx = <span class="hljs-built_in">atomicAdd</span>(global_idx, <span class="hljs-number">1</span>);<br>        <span class="hljs-keyword">if</span> (idx &gt;= total) <span class="hljs-keyword">continue</span>;<br>        output[idx] = input[idx] / <span class="hljs-number">255.0f</span>; <span class="hljs-comment">// 具体任务</span><br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure><p>上述的两种方案是并行的，适合不同类型的kernel。有的kernel发射开销比较大，那么可能就更倾向于选择抢占方式的kernel转换。作者在衡量kernel具体适合什么样的转换方式时，使用了一个叫做周转时间的衡量指标。这个指标的含义是当前kernel在执行时切换上下文大概要花费的时间。对于切分的方案来说，这个时间就等同于小kernel本身的执行时间，因为切分必须要等待小kernel完成后才可以切换上下文。</p><p>实际上，本文开头是和TGS做对比的，强调的是对用户透明同时又可以进行更加细粒度的调度。切分和抢占都是具体的block级别的调度方法，而对用户透明这一点，则是整体的框架实现。上面提到的转换方案，都是Tally框架在kernel运行前，通过实时的ptx级的kernel修改得到的结果，从而实现了无侵入式的kernel调度框架。这个技术方案是最近发现的唯一一篇可以在PTX修改做到这个程度并且开源的文章，大家可以去学习借鉴~</p><p><img src="/opennotes/image.png" alt="alt text"></p><p><img src="/opennotes/image-1.png" alt="alt text"></p>]]></content>
+    
+    
+    <categories>
+      
+      <category>GPU</category>
+      
+    </categories>
+    
+    
+    <tags>
+      
+      <tag>GPU</tag>
+      
+      <tag>CUDA</tag>
+      
+      <tag>PTX</tag>
+      
+      <tag>Compile</tag>
+      
+    </tags>
     
   </entry>
   

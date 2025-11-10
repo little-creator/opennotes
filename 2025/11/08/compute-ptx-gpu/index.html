@@ -1,0 +1,668 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-CN" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/opennotes/img/fluid.png">
+  <link rel="icon" href="/opennotes/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="John Doe">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="Tally：非侵入式的GPU资源隔离框架分享一篇最近的论文，我觉得其中最让我眼前一亮的是他的技术手段。文章的动机比较常见，是要解决GPU上运行多应用时，出现的相互干扰的问题。 围绕这类问题，最近几年出现了很多文章，主要场景有云环境中GPU服务多租户、智能驾驶领域提高GPU使用率等。当一个GPU上运行多个不同应用，可能会造成如下问题： 1，相互干扰导致应用尾延迟增大。 2，关键型应用无法立刻执行。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="compute_ptx_gpu">
+<meta property="og:url" content="https://little-creator.github.io/opennotes/2025/11/08/compute-ptx-gpu/index.html">
+<meta property="og:site_name" content="opennotes">
+<meta property="og:description" content="Tally：非侵入式的GPU资源隔离框架分享一篇最近的论文，我觉得其中最让我眼前一亮的是他的技术手段。文章的动机比较常见，是要解决GPU上运行多应用时，出现的相互干扰的问题。 围绕这类问题，最近几年出现了很多文章，主要场景有云环境中GPU服务多租户、智能驾驶领域提高GPU使用率等。当一个GPU上运行多个不同应用，可能会造成如下问题： 1，相互干扰导致应用尾延迟增大。 2，关键型应用无法立刻执行。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://little-creator.github.io/opennotes/image.png">
+<meta property="og:image" content="https://little-creator.github.io/opennotes/image-1.png">
+<meta property="article:published_time" content="2025-11-08T18:35:59.000Z">
+<meta property="article:modified_time" content="2025-11-10T10:30:08.738Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="CUDA">
+<meta property="article:tag" content="PTX">
+<meta property="article:tag" content="Compile">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://little-creator.github.io/opennotes/image.png">
+  
+  
+  
+  <title>compute_ptx_gpu - opennotes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/opennotes/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/opennotes/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/opennotes/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"little-creator.github.io","root":"/opennotes/","version":"1.9.8","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/opennotes/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/opennotes/js/utils.js" ></script>
+  <script  src="/opennotes/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 70vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/opennotes/">
+      <strong>博客标题</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/opennotes/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>首页</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/opennotes/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>归档</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/opennotes/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>分类</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/opennotes/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>标签</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/opennotes/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>关于</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/opennotes/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="compute_ptx_gpu"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-11-08 18:35" pubdate>
+          2025年11月8日 晚上
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          1k 字
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          9 分钟
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">compute_ptx_gpu</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="Tally：非侵入式的GPU资源隔离框架"><a href="#Tally：非侵入式的GPU资源隔离框架" class="headerlink" title="Tally：非侵入式的GPU资源隔离框架"></a>Tally：非侵入式的GPU资源隔离框架</h3><p>分享一篇最近的论文，我觉得其中最让我眼前一亮的是他的技术手段。文章的动机比较常见，是要解决GPU上运行多应用时，出现的相互干扰的问题。</p>
+<p>围绕这类问题，最近几年出现了很多文章，主要场景有云环境中GPU服务多租户、智能驾驶领域提高GPU使用率等。当一个GPU上运行多个不同应用，可能会造成如下问题：</p>
+<p>1，相互干扰导致应用尾延迟增大。</p>
+<p>2，关键型应用无法立刻执行。</p>
+<p>3，GPU资源利用率降低。</p>
+<p>为了解决这些问题，常见的方案有切分和抢占两种措施。众所周知，GPU上的执行并不能用户精细操控。当kernel从cpu端发射到GPU端后，自动切分为block并且随机分配给SM执行。所以当一个kernel包含的block数量过多时，就会导致停留在GPU上等待调度队列的block数量过多，从而阻塞了新的kernel的发射和执行。因此，切分的方法就是将大的kernel切分成小kernel，将一次发射变为多次发射。从而可以在发射阶段来控制是否要继续执行。</p>
+<p>抢占的实现有多种做法，本文是从代码级别实现的。由于nvidia GPU不开源，同时GPU本身不提供抢占原语，所以无法从硬件层面实现抢占的效果。本文从代码层面，将源代码转换为了持久化线程风格的代码，从而实现了手动抢占的实现。<br>持久化线程（PTB），指的是让kernel不再执行一次任务后就结束，而是可以不断地主动获取任务，从而实现代码层面控制block的执行进度。控制block的执行进度这一点使用一般的编程风格是做不到的，因此block在SM上的执行是无序随机的，不能确定哪个block先执行，哪个block后执行。<br>将原本kernel转换成持久化线程的方案也不难理解。首先是将原本的kernel作为最外层循环中执行的任务，之后添加一些控制变量，比如任务的ID，抢占信号等。</p>
+<p>原本的kernel：</p>
+<figure class="highlight verilog"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs verilog">__global__ <span class="hljs-keyword">void</span> kernel(float* <span class="hljs-keyword">input</span>, float* <span class="hljs-keyword">output</span>, <span class="hljs-keyword">int</span> total) &#123;<br>    <span class="hljs-keyword">int</span> idx = blockIdx<span class="hljs-variable">.x</span> * blockDim<span class="hljs-variable">.x</span> + threadIdx<span class="hljs-variable">.x</span>;<br>    <span class="hljs-keyword">if</span> (idx &gt;= total) <span class="hljs-keyword">return</span>;<br>    <span class="hljs-keyword">output</span>[idx] = <span class="hljs-keyword">input</span>[idx] / <span class="hljs-number">255</span><span class="hljs-variable">.0f</span>; <span class="hljs-comment">// 具体任务</span><br>    <span class="hljs-keyword">return</span>;<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>转换后的kernel：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs cpp">__global__ <span class="hljs-type">int</span> global_idx;<br>__global__ <span class="hljs-type">bool</span> *preempt_flag;<br><span class="hljs-function">__global__ <span class="hljs-type">void</span> <span class="hljs-title">kernel</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">    <span class="hljs-type">float</span>* input, <span class="hljs-type">float</span>* output, <span class="hljs-type">int</span> total,</span></span><br><span class="hljs-params"><span class="hljs-function">    <span class="hljs-keyword">volatile</span> <span class="hljs-type">int</span>* global_idx, <span class="hljs-keyword">volatile</span> <span class="hljs-type">bool</span>* preempt_flag</span></span><br><span class="hljs-params"><span class="hljs-function">)</span> </span>&#123;<br>    <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) &#123;<br>        <span class="hljs-keyword">if</span> (*preempt_flag) <span class="hljs-keyword">return</span>;<br>        <span class="hljs-type">int</span> idx = <span class="hljs-built_in">atomicAdd</span>(global_idx, <span class="hljs-number">1</span>);<br>        <span class="hljs-keyword">if</span> (idx &gt;= total) <span class="hljs-keyword">continue</span>;<br>        output[idx] = input[idx] / <span class="hljs-number">255.0f</span>; <span class="hljs-comment">// 具体任务</span><br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+<p>上述的两种方案是并行的，适合不同类型的kernel。有的kernel发射开销比较大，那么可能就更倾向于选择抢占方式的kernel转换。作者在衡量kernel具体适合什么样的转换方式时，使用了一个叫做周转时间的衡量指标。这个指标的含义是当前kernel在执行时切换上下文大概要花费的时间。对于切分的方案来说，这个时间就等同于小kernel本身的执行时间，因为切分必须要等待小kernel完成后才可以切换上下文。</p>
+<p>实际上，本文开头是和TGS做对比的，强调的是对用户透明同时又可以进行更加细粒度的调度。切分和抢占都是具体的block级别的调度方法，而对用户透明这一点，则是整体的框架实现。上面提到的转换方案，都是Tally框架在kernel运行前，通过实时的ptx级的kernel修改得到的结果，从而实现了无侵入式的kernel调度框架。这个技术方案是最近发现的唯一一篇可以在PTX修改做到这个程度并且开源的文章，大家可以去学习借鉴~</p>
+<p><img src="/opennotes/image.png" srcset="/opennotes/img/loading.gif" lazyload alt="alt text"></p>
+<p><img src="/opennotes/image-1.png" srcset="/opennotes/img/loading.gif" lazyload alt="alt text"></p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/opennotes/categories/GPU/" class="category-chain-item">GPU</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/opennotes/tags/GPU/" class="print-no-link">#GPU</a>
+      
+        <a href="/opennotes/tags/CUDA/" class="print-no-link">#CUDA</a>
+      
+        <a href="/opennotes/tags/PTX/" class="print-no-link">#PTX</a>
+      
+        <a href="/opennotes/tags/Compile/" class="print-no-link">#Compile</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>compute_ptx_gpu</div>
+      <div>https://little-creator.github.io/opennotes/2025/11/08/compute-ptx-gpu/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>作者</div>
+          <div>John Doe</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>发布于</div>
+          <div>2025年11月8日</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>许可协议</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - 署名">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/opennotes/2025/11/10/hello-world/" title="Hello World">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Hello World</span>
+                        <span class="visible-mobile">上一篇</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>目录</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">搜索</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">关键词</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/opennotes/js/events.js" ></script>
+<script  src="/opennotes/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/opennotes/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    window.tocbot.init(Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc));
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/opennotes/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/opennotes/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">博客在允许 JavaScript 运行的环境下浏览效果更佳</div>
+  </noscript>
+</body>
+</html>
