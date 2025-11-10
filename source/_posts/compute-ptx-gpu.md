@@ -57,6 +57,6 @@ __global__ void kernel(
 
 实际上，本文开头是和TGS做对比的，强调的是对用户透明同时又可以进行更加细粒度的调度。切分和抢占都是具体的block级别的调度方法，而对用户透明这一点，则是整体的框架实现。上面提到的转换方案，都是Tally框架在kernel运行前，通过实时的ptx级的kernel修改得到的结果，从而实现了无侵入式的kernel调度框架。这个技术方案是最近发现的唯一一篇可以在PTX修改做到这个程度并且开源的文章，大家可以去学习借鉴~
 
-![alt text](image.png)
+![alt text](/source/images/image.png)
 
-![alt text](image-1.png)
+![alt text](/source/images/image-1.png)
