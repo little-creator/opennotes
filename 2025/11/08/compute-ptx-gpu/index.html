@@ -26,17 +26,17 @@
 <meta property="og:site_name" content="opennotes">
 <meta property="og:description" content="Tally：非侵入式的GPU资源隔离框架分享一篇最近的论文，我觉得其中最让我眼前一亮的是他的技术手段。文章的动机比较常见，是要解决GPU上运行多应用时，出现的相互干扰的问题。 围绕这类问题，最近几年出现了很多文章，主要场景有云环境中GPU服务多租户、智能驾驶领域提高GPU使用率等。当一个GPU上运行多个不同应用，可能会造成如下问题： 1，相互干扰导致应用尾延迟增大。 2，关键型应用无法立刻执行。">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:image" content="https://little-creator.github.io/opennotes/image.png">
-<meta property="og:image" content="https://little-creator.github.io/opennotes/image-1.png">
+<meta property="og:image" content="https://little-creator.github.io/opennotes/source/images/image.png">
+<meta property="og:image" content="https://little-creator.github.io/opennotes/source/images/image-1.png">
 <meta property="article:published_time" content="2025-11-08T18:35:59.000Z">
-<meta property="article:modified_time" content="2025-11-10T10:30:08.738Z">
+<meta property="article:modified_time" content="2025-11-10T10:37:30.453Z">
 <meta property="article:author" content="John Doe">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="CUDA">
 <meta property="article:tag" content="PTX">
 <meta property="article:tag" content="Compile">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://little-creator.github.io/opennotes/image.png">
+<meta name="twitter:image" content="https://little-creator.github.io/opennotes/source/images/image.png">
   
   
   
@@ -295,8 +295,8 @@
 <figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs cpp">__global__ <span class="hljs-type">int</span> global_idx;<br>__global__ <span class="hljs-type">bool</span> *preempt_flag;<br><span class="hljs-function">__global__ <span class="hljs-type">void</span> <span class="hljs-title">kernel</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">    <span class="hljs-type">float</span>* input, <span class="hljs-type">float</span>* output, <span class="hljs-type">int</span> total,</span></span><br><span class="hljs-params"><span class="hljs-function">    <span class="hljs-keyword">volatile</span> <span class="hljs-type">int</span>* global_idx, <span class="hljs-keyword">volatile</span> <span class="hljs-type">bool</span>* preempt_flag</span></span><br><span class="hljs-params"><span class="hljs-function">)</span> </span>&#123;<br>    <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) &#123;<br>        <span class="hljs-keyword">if</span> (*preempt_flag) <span class="hljs-keyword">return</span>;<br>        <span class="hljs-type">int</span> idx = <span class="hljs-built_in">atomicAdd</span>(global_idx, <span class="hljs-number">1</span>);<br>        <span class="hljs-keyword">if</span> (idx &gt;= total) <span class="hljs-keyword">continue</span>;<br>        output[idx] = input[idx] / <span class="hljs-number">255.0f</span>; <span class="hljs-comment">// 具体任务</span><br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
 <p>上述的两种方案是并行的，适合不同类型的kernel。有的kernel发射开销比较大，那么可能就更倾向于选择抢占方式的kernel转换。作者在衡量kernel具体适合什么样的转换方式时，使用了一个叫做周转时间的衡量指标。这个指标的含义是当前kernel在执行时切换上下文大概要花费的时间。对于切分的方案来说，这个时间就等同于小kernel本身的执行时间，因为切分必须要等待小kernel完成后才可以切换上下文。</p>
 <p>实际上，本文开头是和TGS做对比的，强调的是对用户透明同时又可以进行更加细粒度的调度。切分和抢占都是具体的block级别的调度方法，而对用户透明这一点，则是整体的框架实现。上面提到的转换方案，都是Tally框架在kernel运行前，通过实时的ptx级的kernel修改得到的结果，从而实现了无侵入式的kernel调度框架。这个技术方案是最近发现的唯一一篇可以在PTX修改做到这个程度并且开源的文章，大家可以去学习借鉴~</p>
-<p><img src="/opennotes/image.png" srcset="/opennotes/img/loading.gif" lazyload alt="alt text"></p>
-<p><img src="/opennotes/image-1.png" srcset="/opennotes/img/loading.gif" lazyload alt="alt text"></p>
+<p><img src="/opennotes/source/images/image.png" srcset="/opennotes/img/loading.gif" lazyload alt="alt text"></p>
+<p><img src="/opennotes/source/images/image-1.png" srcset="/opennotes/img/loading.gif" lazyload alt="alt text"></p>
 
                 
               </div>
